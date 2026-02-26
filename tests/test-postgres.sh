@@ -38,7 +38,7 @@ for tbl in tb_plan tb_organization tb_user tb_subscription; do
 done
 
 echo "── Views ───────────────────────────────────────────────────────────────"
-for view in v_plan v_organization v_user v_subscription; do
+for view in v_plan v_organization v_org_member v_user v_subscription; do
     check_exists "view $view" \
         "SELECT COUNT(*) FROM information_schema.views WHERE table_schema='public' AND table_name='$view'"
 done
@@ -69,6 +69,20 @@ for col in $expected_cols; do
     fi
 done
 
+echo "── v_subscription columns ──────────────────────────────────────────────"
+expected_cols="id org_id plan_id plan status current_period_end cancel_at_period_end created_at"
+actual_cols=$($PSQL -tAc \
+    "SELECT string_agg(column_name, ' ' ORDER BY ordinal_position)
+     FROM information_schema.columns
+     WHERE table_schema='public' AND table_name='v_subscription'")
+for col in $expected_cols; do
+    if echo "$actual_cols" | grep -qw "$col"; then
+        pass "v_subscription column: $col"
+    else
+        fail "v_subscription missing column: $col"
+    fi
+done
+
 echo "── fn_create_organization ──────────────────────────────────────────────"
 new_org_id=$($PSQL -tAc \
     "SELECT id FROM fn_create_organization('CI Test Org', 'free') LIMIT 1")
@@ -80,11 +94,20 @@ check_exists "fn_create_organization result in v_organization" \
     "SELECT COUNT(*) FROM v_organization WHERE id = $new_org_id"
 check_exists "fn_create_organization subscription created" \
     "SELECT COUNT(*) FROM tb_subscription WHERE org_id = $new_org_id"
+check_exists "fn_create_organization slug generated" \
+    "SELECT COUNT(*) FROM tb_organization WHERE id = $new_org_id AND slug = 'ci-test-org'"
 
 echo "── fn_invite_user ──────────────────────────────────────────────────────"
-$PSQL -c "SELECT fn_invite_user($new_org_id, 'ci-user@example.com', 'member')" > /dev/null
-check_exists "fn_invite_user user created" \
+new_user_id=$($PSQL -tAc \
+    "SELECT user_id FROM fn_invite_user($new_org_id, 'ci-user@example.com', 'member') LIMIT 1")
+new_user_id=$(echo "$new_user_id" | tr -d '[:space:]')
+if [ -z "$new_user_id" ]; then
+    fail "fn_invite_user returned no row"
+fi
+check_exists "fn_invite_user user created in tb_user" \
     "SELECT COUNT(*) FROM tb_user WHERE email = 'ci-user@example.com'"
+check_exists "fn_invite_user result in v_org_member" \
+    "SELECT COUNT(*) FROM v_org_member WHERE user_id = $new_user_id"
 
 echo "── fn_change_plan ──────────────────────────────────────────────────────"
 new_status=$($PSQL -tAc \

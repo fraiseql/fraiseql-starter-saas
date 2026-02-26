@@ -13,11 +13,13 @@ port = 8080
 
 [database]
 url      = "${DATABASE_URL}"
-pool_min = 5
-pool_max = 50
-ssl_mode = "prefer"
+pool_min = 2
+pool_max = 20          # Increase for high-concurrency production deployments.
+ssl_mode = "prefer"    # Default Postgres max_connections is 100; keep headroom.
 
-# ── Observers (optional — remove if not using NATS) ───────────────────────────
+# ── Observers (optional) ──────────────────────────────────────────────────────
+# FraiseQL skips NATS publishing if NATS_URL is unset or empty.
+# Remove this section entirely to disable the observer subsystem.
 [fraiseql.observers]
 backend  = "nats"
 nats_url = "${NATS_URL}"

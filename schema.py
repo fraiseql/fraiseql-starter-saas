@@ -75,6 +75,7 @@ class Subscription:
     status: str         # "active" | "trialing" | "past_due" | "canceled"
     current_period_end: str
     cancel_at_period_end: bool
+    created_at: str
 
 
 # ── Queries ───────────────────────────────────────────────────────────────────
@@ -137,7 +138,7 @@ def create_organization(name: str, plan_slug: str = "free") -> Organization:
 
 @fraiseql.mutation(sql_source="fn_invite_user", operation="CREATE")
 def invite_user(org_id: int, email: str, role: str = "member") -> OrgMember:
-    """Invite a user to an organisation."""
+    """Invite a user to an organisation (backed by v_org_member)."""
     pass
 
 

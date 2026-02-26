@@ -21,8 +21,9 @@ A multi-tenant SaaS API built with FraiseQL: **organisations, users, subscriptio
 ```graphql
 type Plan         { id, slug, name, monthlyPriceCents, maxSeats, features }
 type Organization { id, slug, name, planId, plan, seatCount, createdAt }
+type OrgMember    { userId, orgId, role, joinedAt }
 type User         { id, email, displayName, orgId, org, role, createdAt, lastSeenAt }
-type Subscription { id, orgId, planId, plan, status, currentPeriodEnd, cancelAtPeriodEnd }
+type Subscription { id, orgId, planId, plan, status, currentPeriodEnd, cancelAtPeriodEnd, createdAt }
 
 type Query {
   plans: [Plan!]!
@@ -43,6 +44,10 @@ type Mutation {
 }
 ```
 
+> ⚠️ **Security**: `myOrganization(orgId)` and `users(orgId)` accept `orgId` as a
+> GraphQL argument. In production, **never** let the client supply this value directly.
+> Inject it server-side from verified JWT claims via an API gateway or middleware.
+
 ## Quickstart (Docker — includes NATS)
 
 ```bash
@@ -58,9 +63,13 @@ docker compose up
 API at **http://localhost:8080/graphql**.
 NATS monitoring at **http://localhost:8222**.
 
-## Quickstart (local binary — no NATS)
+> **Note**: `fraiseql compile` requires FraiseQL v2 (coming soon). Skip this step
+> if running FraiseQL v1.
 
-Remove the `[fraiseql.observers]` section from `fraiseql.toml`, then:
+## Quickstart (local binary — without NATS)
+
+Leave `NATS_URL` unset in your `.env` to disable event publishing. No config changes
+needed — FraiseQL skips NATS automatically when the URL is absent.
 
 ```bash
 cp .env.example .env && source .env
@@ -70,7 +79,9 @@ python schema.py && fraiseql compile && fraiseql run
 
 ## Multi-tenancy pattern
 
-Every query that returns tenant-scoped data accepts an `orgId` argument. In production, pass this from JWT claims via your API gateway — never trust the client to supply it directly.
+Every query that returns tenant-scoped data accepts an `orgId` argument. In production,
+pass this from JWT claims via your API gateway — never trust the client to supply it
+directly.
 
 ```graphql
 # Always scope queries to the authenticated org
@@ -96,11 +107,25 @@ mutation {
 
 ## NATS observers
 
-When `NATS_URL` is set and `[fraiseql.observers]` is configured, FraiseQL publishes mutation events to NATS subjects (e.g. `fraiseql.mutation.createOrganization`). Subscribe downstream for billing webhooks, audit logging, etc.
+When `NATS_URL` is set and `[fraiseql.observers]` is configured, FraiseQL publishes
+mutation events to NATS subjects (e.g. `fraiseql.mutation.createOrganization`).
+Subscribe downstream for billing webhooks, audit logging, etc.
 
 ## Rate limiting
 
-The `fraiseql.toml` ships with rate limiting enabled on auth endpoints (20 req/60 s). Adjust thresholds under `[fraiseql.security.rate_limiting]`.
+The `fraiseql.toml` ships with rate limiting enabled on auth endpoints (20 req/60 s).
+Adjust thresholds under `[fraiseql.security.rate_limiting]`.
+
+## Running tests
+
+```bash
+# Start only the database
+docker compose up postgres -d
+
+# Apply schema and run tests
+PGPASSWORD=postgres psql -h localhost -U postgres -d saas -f init.sql
+bash tests/test-postgres.sh
+```
 
 ## Next steps
 

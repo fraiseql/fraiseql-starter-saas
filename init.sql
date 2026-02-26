@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS tb_organization (
     id         SERIAL,
     slug       TEXT        NOT NULL UNIQUE,
     name       TEXT        NOT NULL,
+    -- NOTE: plan_id here must always match tb_subscription.plan_id for this org.
+    -- Only fn_change_plan should update either column. Direct UPDATEs bypassing
+    -- that function will cause inconsistent state.
     plan_id    INTEGER     NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT pk_organization PRIMARY KEY (id),
@@ -40,6 +43,8 @@ CREATE TABLE IF NOT EXISTS tb_user (
 CREATE TABLE IF NOT EXISTS tb_subscription (
     id                   SERIAL,
     org_id               INTEGER     NOT NULL UNIQUE,
+    -- NOTE: plan_id here must always match tb_organization.plan_id for this org.
+    -- Only fn_change_plan should update either column.
     plan_id              INTEGER     NOT NULL,
     status               TEXT        NOT NULL DEFAULT 'active'
                          CHECK (status IN ('active', 'trialing', 'past_due', 'canceled')),
@@ -63,11 +68,25 @@ SELECT
     o.slug,
     o.name,
     o.plan_id,
-    row_to_json(p)::jsonb                                            AS plan,
-    (SELECT count(*) FROM tb_user u WHERE u.org_id = o.id)::INTEGER AS seat_count,
-    o.created_at::TEXT                                               AS created_at
+    row_to_json(p)::jsonb      AS plan,
+    COALESCE(uc.seat_count, 0) AS seat_count,
+    o.created_at::TEXT         AS created_at
 FROM tb_organization o
-JOIN tb_plan p ON p.id = o.plan_id;
+JOIN tb_plan p ON p.id = o.plan_id
+LEFT JOIN LATERAL (
+    SELECT COUNT(*)::INTEGER AS seat_count
+    FROM tb_user u
+    WHERE u.org_id = o.id
+) uc ON true;
+
+-- View used by invite_user mutation result
+CREATE OR REPLACE VIEW v_org_member AS
+SELECT
+    u.id   AS user_id,
+    u.org_id,
+    u.role,
+    u.created_at::TEXT AS joined_at
+FROM tb_user u;
 
 CREATE OR REPLACE VIEW v_user AS
 SELECT
@@ -90,7 +109,8 @@ SELECT
     row_to_json(p)::jsonb      AS plan,
     s.status,
     s.current_period_end::TEXT AS current_period_end,
-    s.cancel_at_period_end
+    s.cancel_at_period_end,
+    s.created_at::TEXT         AS created_at
 FROM tb_subscription s
 JOIN tb_plan p ON p.id = s.plan_id;
 
@@ -110,7 +130,7 @@ BEGIN
         RAISE EXCEPTION 'Unknown plan: %', p_plan_slug;
     END IF;
 
-    v_slug := lower(regexp_replace(p_name, '[^a-zA-Z0-9]+', '-', 'g'));
+    v_slug := trim('-' FROM lower(regexp_replace(p_name, '[^a-zA-Z0-9]+', '-', 'g')));
 
     INSERT INTO tb_organization (slug, name, plan_id)
     VALUES (v_slug, p_name, v_plan_id)
@@ -127,7 +147,7 @@ CREATE OR REPLACE FUNCTION fn_invite_user(
     p_org_id INTEGER,
     p_email  TEXT,
     p_role   TEXT DEFAULT 'member'
-) RETURNS TABLE(user_id INTEGER, org_id INTEGER, role TEXT, joined_at TEXT) AS $$
+) RETURNS SETOF v_org_member AS $$
 DECLARE
     v_user_id INTEGER;
 BEGIN
@@ -136,9 +156,7 @@ BEGIN
     ON CONFLICT (email) DO UPDATE SET org_id = p_org_id, role = p_role
     RETURNING id INTO v_user_id;
 
-    RETURN QUERY
-    SELECT u.id, u.org_id, u.role, u.created_at::TEXT
-    FROM tb_user u WHERE u.id = v_user_id;
+    RETURN QUERY SELECT * FROM v_org_member WHERE user_id = v_user_id;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -154,6 +172,7 @@ BEGIN
         RAISE EXCEPTION 'Unknown plan: %', p_plan_slug;
     END IF;
 
+    -- Keep tb_organization.plan_id and tb_subscription.plan_id in sync.
     UPDATE tb_organization SET plan_id = v_plan_id WHERE id = p_org_id;
     UPDATE tb_subscription  SET plan_id = v_plan_id, status = 'active',
                                 cancel_at_period_end = false
