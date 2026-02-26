@@ -1,0 +1,29 @@
+[project]
+name        = "starter-saas"
+version     = "1.0.0"
+description = "SaaS starter — multi-tenant, auth, subscriptions, NATS"
+
+[fraiseql]
+schema_file = "schema.json"
+output_file = "schema.compiled.json"
+
+[server]
+host = "0.0.0.0"
+port = 8080
+
+[database]
+url      = "${DATABASE_URL}"
+pool_min = 5
+pool_max = 50
+ssl_mode = "prefer"
+
+# ── Observers (optional — remove if not using NATS) ───────────────────────────
+[fraiseql.observers]
+backend  = "nats"
+nats_url = "${NATS_URL}"
+
+# ── Rate limiting (recommended for auth endpoints) ────────────────────────────
+[fraiseql.security.rate_limiting]
+enabled                    = true
+auth_start_max_requests    = 20
+auth_start_window_secs     = 60
