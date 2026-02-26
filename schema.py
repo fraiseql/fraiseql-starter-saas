@@ -91,10 +91,7 @@ def plan(id: int) -> Plan | None:
     pass
 
 
-@fraiseql.query(
-    sql_source="v_organization",
-    auto_params={"limit": True, "offset": True},
-)
+@fraiseql.query(sql_source="v_organization")
 def organizations(limit: int = 20, offset: int = 0) -> list[Organization]:
     """List organisations (admin only)."""
     pass
@@ -112,10 +109,7 @@ def my_organization(org_id: int) -> Organization | None:
     pass
 
 
-@fraiseql.query(
-    sql_source="v_user",
-    auto_params={"limit": True, "offset": True, "where": True},
-)
+@fraiseql.query(sql_source="v_user")
 def users(org_id: int, limit: int = 20, offset: int = 0) -> list[User]:
     """List users within an organisation."""
     pass

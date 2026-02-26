@@ -1,5 +1,8 @@
 # fraiseql/starter-saas
 
+[![CI](https://github.com/fraiseql/fraiseql-starter-saas/actions/workflows/ci.yml/badge.svg)](https://github.com/fraiseql/fraiseql-starter-saas/actions/workflows/ci.yml)
+[![Docker](https://ghcr-badge.egpl.dev/fraiseql/fraiseql-starter-saas/latest_tag?label=ghcr.io)](https://github.com/fraiseql/fraiseql-starter-saas/pkgs/container/fraiseql-starter-saas)
+
 A multi-tenant SaaS API built with FraiseQL: **organisations, users, subscription plans, NATS observers**.
 
 ## What's inside
@@ -10,6 +13,7 @@ A multi-tenant SaaS API built with FraiseQL: **organisations, users, subscriptio
 | `fraiseql.toml` | Project, runtime, observer, and security configuration |
 | `init.sql` | PostgreSQL tables, views, functions, and seed data |
 | `docker-compose.yml` | PostgreSQL + NATS + fraiseql in one command |
+| `Dockerfile` | Multi-stage image for self-hosting |
 | `.env.example` | Environment variable template |
 
 ## GraphQL API surface
